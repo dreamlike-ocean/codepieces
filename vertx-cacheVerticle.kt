@@ -1,13 +1,12 @@
-class CacheVerticle:AbstractVerticle(){
-  class HandlerWrapper<T>(val keyAndHandler:Pair<String,(T?) -> Unit>)
-  class AddWrapper<T>(val addPair:Pair<String,T>)
+class CacheVerticle: AbstractVerticle(){
+
   companion object{
     private const val GET_CACHE_ADDRESS = "get_cache_address"
     private const val ADD_CACHE_ADDRESS = "add_cache_address"
     private const val REMOVE_CACHE_ADDRESS = "remove_cache_address"
-    fun <T> addCache(pair: Pair<String,T>) = Vertx.currentContext().owner().eventBus().send(ADD_CACHE_ADDRESS,AddWrapper(pair))
+    fun <T> addCache(pair: Pair<String,T>) = Vertx.currentContext().owner().eventBus().send(ADD_CACHE_ADDRESS,pair)
     fun <T> getCache(key:String, handler: (T?) -> Unit){
-      Vertx.currentContext().owner().eventBus().send(GET_CACHE_ADDRESS,HandlerWrapper(key to handler))
+      Vertx.currentContext().owner().eventBus().send(GET_CACHE_ADDRESS,key to handler)
     }
     fun remove(key:String){
       Vertx.currentContext().owner().eventBus().send(REMOVE_CACHE_ADDRESS,key)
@@ -16,17 +15,16 @@ class CacheVerticle:AbstractVerticle(){
   private val cache = mutableMapOf<String,Any>()
 
   override fun start() {
-   val eventbus = vertx.eventBus()
-    eventbus.registerDefaultCodec(HandlerWrapper::class.java,UnModifiableObjectCodec(HandlerWrapper::class.java))
-    eventbus.registerDefaultCodec(AddWrapper::class.java,UnModifiableObjectCodec(AddWrapper::class.java))
+    val eventbus = vertx.eventBus()
+    eventbus.registerDefaultCodec(Pair::class.java,UnModifiableObjectCodec(Pair::class.java))
 
-    eventbus.localConsumer<HandlerWrapper<Any>>(GET_CACHE_ADDRESS){
-      val keyAndHandler = it.body().keyAndHandler
-      keyAndHandler.second(cache[keyAndHandler.first])
+    eventbus.localConsumer<Pair<String,(Any?)->Unit>>(GET_CACHE_ADDRESS){
+      val body = it.body()
+      body.second(cache[body.first])
     }
 
-    eventbus.localConsumer<AddWrapper<Any>>(ADD_CACHE_ADDRESS){
-      val add = it.body().addPair
+    eventbus.localConsumer<Pair<String,Any>>(ADD_CACHE_ADDRESS){
+      val add = it.body()
       cache[add.first] = add.second
     }
 
@@ -51,4 +49,3 @@ class CacheVerticle:AbstractVerticle(){
     }
   }
 }
-
