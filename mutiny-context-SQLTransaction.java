@@ -1,6 +1,11 @@
+package com.example;
+
 import io.smallrye.mutiny.Context;
 import io.smallrye.mutiny.Uni;
+import io.smallrye.mutiny.vertx.UniHelper;
 import io.vertx.mutiny.mysqlclient.MySQLPool;
+import io.vertx.mutiny.sqlclient.Row;
+import io.vertx.mutiny.sqlclient.RowSet;
 import io.vertx.mutiny.sqlclient.SqlConnection;
 import io.vertx.mutiny.sqlclient.Transaction;
 
@@ -19,30 +24,37 @@ public class ExampleResource {
     @Path("/get")
     @GET
     public Uni<String> get(){
-      //调用链上的context
-        var query_context = Context.empty();
-        mySQLPool.getConnection()
-                .withContext((sc,context) -> sc
-                            //context塞sqlconnection
-                        .invoke(sq ->  context.put(CONNECTION_KEY,sq))
+
+        Uni<RowSet<Row>> upstream = mySQLPool.getConnection()
+                .withContext((sc, context) -> sc
+                        .invoke(sq -> context.put(CONNECTION_KEY, sq))
                         .flatMap(SqlConnection::begin)
-                            //塞transaction
-                        .invoke(ts -> context.put(TRANSACTION_KEY, ts)))
-          
-                .flatMap(ts -> query_context.<SqlConnection>get(CONNECTION_KEY).query("delete from score").execute())
-                .flatMap(rs -> query_context.<SqlConnection>get(CONNECTION_KEY).query("select count(*) as count from score").execute())
-          //查看在当前事务下统计条数  是0 因为全delete了
-                .invoke(rs -> System.out.println(rs.iterator().next().getInteger("count")))
-          //回滚
-                .call(rs -> query_context.<Transaction>get(TRANSACTION_KEY).rollback())
-          //回滚后返回连接到池中
-                .call(rs -> query_context.<SqlConnection>get(CONNECTION_KEY).close())
-          //—————————————————————————————————以上为惰性上游操作————————————————————————————————————————————————————————————————————
-          //订阅操作 传入自定义context 实际上不传参也行。。。默认给一个Context.empty()
-          // 这边是下游操作，元素是select语句产生的rowset作为元素
-                .subscribe().with(query_context, rs -> System.out.println("end"), Throwable::printStackTrace);
+                        .invoke(ts -> context.put(TRANSACTION_KEY, ts))
+                        .flatMap(ts -> context.<SqlConnection>get(CONNECTION_KEY).query("delete from score").execute())
+                        .flatMap(rs -> context.<SqlConnection>get(CONNECTION_KEY).query("select count(*) as count from score").execute())
+                );
+        //————————————————————————————————上方为上游 执行sql操作（包含事务）————————————————————————————————
+        //下游订阅 将连接和事务管理权移交到下游操作
+        var query_context = Context.empty();
+        upstream.subscribe().with(query_context, rs -> {
+            //获取该事务下的查询计数 此时为0
+                    System.out.println(rs.iterator().next().getInteger("count"));
+                    //提交+归还连接
+                    query_context.<Transaction>get(TRANSACTION_KEY).commit()
+                            .flatMap(v -> query_context.<SqlConnection>get(CONNECTION_KEY).close())
+                            .subscribe().with(UniHelper.NOOP);
+                },
+                //失败回滚+归还
+                t -> {
+                    query_context.<Transaction>get(TRANSACTION_KEY).rollback()
+                            .flatMap(v -> query_context.<SqlConnection>get(CONNECTION_KEY).close())
+                            .subscribe().with(UniHelper.NOOP);
+                });
+
+
         return Uni.createFrom().item("d");
     }
 
 
 }
+
