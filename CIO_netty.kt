@@ -67,9 +67,9 @@ class ChannelCoroutine(private val channel: Channel,private val channelReadHandl
     if (peek.readableBytes() == 0) {
       queue.poll()
     }
-    if (queue.isEmpty()) {
-      channel.config().isAutoRead = false
-    }
+    
+    channel.config().isAutoRead = false
+    
     continuation.resume(length)
   }
 
