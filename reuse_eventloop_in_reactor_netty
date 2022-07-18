@@ -1,0 +1,10 @@
+EventLoopGroup e = new NioEventLoopGroup((r) -> {
+      Thread thread = new Thread(r);
+      thread.setName("Dreamlike");
+      return thread;
+    });
+HttpClient httpClient = HttpClient
+      .create()
+      .runOn(e);
+WebClient webClient = WebClient.builder()
+      .clientConnector(new ReactorClientHttpConnector(httpClient)).build();
