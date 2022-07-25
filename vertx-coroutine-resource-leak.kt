@@ -1,39 +1,42 @@
 
 val queue = ConcurrentLinkedQueue<String>()
-fun main() {
-  queue.addAll(listOf("1","2","3"))
-  val vertx = Vertx.vertx()
-  val start = LocalDateTime.now()
-  val job = CoroutineScope(vertx.dispatcher() as CoroutineContext).launch {
-    async {
-      val msg = doLongTask(vertx,2_000).onComplete {
-        //这里是2
-        println("oncomplete queue size ${queue.size}")
-      }
-        .await()
-        //由于被取消了 所以15，16行没法调用，所以资源泄露了
-      println("end async $msg")
-      queue.offer(msg)
+fun main(){
+    val vertx = Vertx.vertx()
+    queue.addAll(listOf("1","2","3"))
+    val coroutineDispatcher = vertx.dispatcher() as  CoroutineContext
+
+    CoroutineScope(coroutineDispatcher).launch {
+
+        withTimeout(1000){
+            vertx.leakFun()
+        }
+
+    }.invokeOnCompletion {
+        println("超时了！应该结束了 此时的元素数量是${queue.size}")
+        vertx.setTimer(2000){
+            println("再等两秒 此时的元素数量是${queue.size}")
+        }
     }
-    println("launch")
-  }
-  //timeout handler
-  vertx.setTimer(1000){
-    if (!job.isCompleted) job.cancel()
-  }
 
-  job.invokeOnCompletion {
-    println(Duration.between(start,LocalDateTime.now()).seconds)
-    //这里是3
-    println("queue size ${queue.size}")
-  }
-  
+
+}
+suspend fun Vertx.leakFun(){
+    var resource : String?=null
+    try {
+        resource = getResource().await()
+        println("用资源做点事情.....")
+    }finally {
+        if (resource != null) {
+            queue.offer(resource)
+        }
+    }
+}
+// 10 connection pool
+fun Vertx.getResource():Future<String>{
+    val promise = Promise.promise<String>()
+    setTimer(2000){
+        promise.complete(queue.poll())
+    }
+    return promise.future()
 }
 
-fun doLongTask(vertx: Vertx, delay:Long):Future<String>{
-  val promise = Promise.promise<String>()
-  vertx.setTimer(delay){
-    promise.complete(queue.poll())
-  }
-  return promise.future()
-}
