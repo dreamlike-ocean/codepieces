@@ -31,6 +31,13 @@ suspend fun Vertx.leakFun(){
         }
     }
 }
+suspend fun Vertx.unLeakFun(){
+    val job = currentCoroutineContext().job
+    val resource = getResource()
+            .onSuccess{ s -> job.invokeOnCompletion { queue.offer(s) }}.await()
+    println("用资源做点事情.....")
+
+}
 // 10 connection pool
 fun Vertx.getResource():Future<String>{
     val promise = Promise.promise<String>()
