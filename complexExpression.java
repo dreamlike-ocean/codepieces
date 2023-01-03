@@ -1,5 +1,5 @@
 
-interface Expression{
+sealed interface Expression permits ComplexExpression, SimpleExpression {
 
 }
 
@@ -8,11 +8,6 @@ class OpJsonSerializer extends JsonSerializer<ComplexExpression> {
 
     @Override
     public void serialize(ComplexExpression complexExpression, JsonGenerator jsonGenerator, SerializerProvider serializerProvider) throws IOException {
-//        jgen.writeStartObject();
-//        jgen.writeNumberField("id", value.id);
-//        jgen.writeStringField("itemName", value.itemName);
-//        jgen.writeNumberField("owner", value.owner.id);
-//        jgen.writeEndObject();
         jsonGenerator.writeStartObject();
         jsonGenerator.writeArrayFieldStart(complexExpression.getOp());
         for (Expression expression : complexExpression.getChildExpression()) {
@@ -23,8 +18,7 @@ class OpJsonSerializer extends JsonSerializer<ComplexExpression> {
     }
 }
 
-@Data
-class SimpleExpression implements Expression{
+final class SimpleExpression implements Expression {
     private String left;
     private String op;
     private String right;
@@ -34,14 +28,53 @@ class SimpleExpression implements Expression{
         this.op = op;
         this.right = right;
     }
+
+    public String getLeft() {
+        return left;
+    }
+
+    public void setLeft(String left) {
+        this.left = left;
+    }
+
+    public String getOp() {
+        return op;
+    }
+
+    public void setOp(String op) {
+        this.op = op;
+    }
+
+    public String getRight() {
+        return right;
+    }
+
+    public void setRight(String right) {
+        this.right = right;
+    }
 }
 
 @JsonSerialize(using = OpJsonSerializer.class)
-@Data
-class ComplexExpression implements Expression{
+final class ComplexExpression implements Expression {
 
-     private List<Expression> childExpression;
+    private List<Expression> childExpression;
 
-     private String op;
+    private String op;
+
+    public List<Expression> getChildExpression() {
+        return childExpression;
+    }
+
+    public void setChildExpression(List<Expression> childExpression) {
+        this.childExpression = childExpression;
+    }
+
+    public String getOp() {
+        return op;
+    }
+
+    public void setOp(String op) {
+        this.op = op;
+    }
 }
 
