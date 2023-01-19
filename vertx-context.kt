@@ -11,13 +11,13 @@ public class main {
 
         EventBus bus = vertx.eventBus();
         bus.addOutboundInterceptor(dc -> {
-            String o = Vertx.currentContext().get("123");
+            String o = Vertx.currentContext().getLocal("123");
             dc.message().headers().set("123", o);
             dc.next();
         });
         bus.addInboundInterceptor(dc -> {
             String s = dc.message().headers().get("123");
-            Vertx.currentContext().put("123", s);
+            Vertx.currentContext().putLocal("123", s);
             dc.next();
         });
 
@@ -25,7 +25,7 @@ public class main {
                 .handler(rc -> {
 
                     UUID value = UUID.randomUUID();
-                    Vertx.currentContext().put("123", value.toString());
+                    Vertx.currentContext().putLocal("123", value.toString());
                     System.out.println("http:"+value.toString());
                     System.out.println(Thread.currentThread() + ":" + System.identityHashCode(Vertx.currentContext()) + ":http");
                     bus.send("address","message");
@@ -61,7 +61,7 @@ class EventBusVerticle extends AbstractVerticle{
                 .handler(m -> {
                     System.out.println("consumer recv:"+m.body());
                     System.out.println(Thread.currentThread() + ":" + System.identityHashCode(Vertx.currentContext()) + ":EventBus");
-                    System.out.println("eventbus:"+Vertx.currentContext().get("123"));
+                    System.out.println("eventbus:"+Vertx.currentContext().getLocal("123"));
                 });
     }
 }
