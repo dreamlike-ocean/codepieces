@@ -1,0 +1,89 @@
+
+public class DemoApplication {
+
+//--enable-preview --add-exports java.base/jdk.internal=ALL-UNNAMED --add-exports java.base/jdk.internal.misc=ALL-UNNAMED --add-exports java.base/jdk.internal.access=ALL-UNNAMED
+
+   public static void main(String[] args) throws NoSuchFieldException, IllegalAccessException {
+       CarrierThreadLocal<String> carrierThreadLocal = new CarrierThreadLocal<>();
+       ThreadLocal<String> plainThreadLocal = new ThreadLocal<>();
+       ExecutorService eventLoop = Executors.newSingleThreadExecutor((r) -> new Thread(r,"dreamlike"));
+       Thread.Builder.OfVirtual virtualBuilder = Thread.ofVirtual();
+       setScheduler(virtualBuilder, eventLoop);
+
+       {
+           //这里是测试 CarrierThreadLocal
+           eventLoop.execute(() -> {
+               //给载体线程挂个ThreadLocal
+               String s = UUID.randomUUID().toString();
+               carrierThreadLocal.set("carrier:" + s);
+           });
+           virtualBuilder.start(() -> {
+               JavaLangAccess langAccess = SharedSecrets.getJavaLangAccess();
+               Thread carrierThread = langAccess.currentCarrierThread();
+               System.out.println(Thread.currentThread() + ":" + carrierThreadLocal.get() + ": carrier:" + carrierThread);
+           });
+       }
+
+       {
+           //测试continuation的Thread.currentThread 直接就是对应线程
+           //标号为控制流顺序
+           ContinuationScope scope = new ContinuationScope("customer");
+           Continuation continuation = new Continuation(scope, () -> {
+               //2 这里是main函数
+               System.out.println("before yield:" + Thread.currentThread());
+               Continuation.yield(scope);
+               //4 这里是线程池的线程
+               System.out.println("after yield:" + Thread.currentThread());
+               Continuation currentContinuation = Continuation.getCurrentContinuation(scope);
+           });
+           //1
+           continuation.run();
+           eventLoop.execute(() ->/*3 */ continuation.run());
+       }
+
+       {
+           eventLoop.execute(() -> {
+               ThreadLocal<String> threadLocal = plainThreadLocal;
+               threadLocal.set("plain:" + UUID.randomUUID());
+           });
+
+           virtualBuilder.start(() -> {
+               String s = plainThreadLocal.get();
+               System.out.println("should be null:"+s);
+               try {
+                   String carrierThreadLocalValue = SharedSecrets.getJavaLangAccess()
+                           //这个方法会短暂放置载体线程到currentThread上面 然后再放回来
+                           .executeOnCarrierThread(plainThreadLocal::get);
+                   System.out.println("should not be null:"+carrierThreadLocalValue);
+               } catch (Exception e) {
+                   throw new RuntimeException("should not be here");
+               }
+           });
+       }
+
+
+       eventLoop.close();
+   }
+
+
+   public static Unsafe getUnsafe() throws NoSuchFieldException, IllegalAccessException {
+       Class<Unsafe> aClass = Unsafe.class;
+       Field unsafe = aClass.getDeclaredField("theUnsafe");
+       unsafe.setAccessible(true);
+       return ((Unsafe) unsafe.get(null));
+   }
+
+   public static void setScheduler(Thread.Builder.OfVirtual builder,Executor scheduler) throws NoSuchFieldException, IllegalAccessException {
+       Field schedulerField = builder.getClass().getDeclaredField("scheduler");
+       Unsafe unsafe = getUnsafe();
+       long offset = unsafe.objectFieldOffset(schedulerField);
+       unsafe.getAndSetObject(builder, offset, scheduler);
+   }
+   
+   
+
+
+
+
+
+}
