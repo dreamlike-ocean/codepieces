@@ -1,0 +1,37 @@
+class LoomApplication() : UndertowBuilderCustomizer {
+    override fun customize(builder: Undertow.Builder) {
+        val clazz = builder::class.java
+        val workerOption = clazz.getDeclaredField("workerOptions").run {
+            isAccessible = true
+            get(builder) as OptionMap.Builder
+        }
+        val ioThreads = clazz.getDeclaredField("ioThreads").run {
+            isAccessible = true
+            get(builder) as Int
+        }
+        val workerThreads = clazz.getDeclaredField("workerThreads").run {
+            isAccessible = true
+            get(builder) as Int
+        }
+        val xnio = Xnio.getInstance(Undertow::class.java.classLoader)
+        val opt = OptionMap.builder()
+            .set(Options.WORKER_IO_THREADS, ioThreads)
+            .set(Options.CONNECTION_HIGH_WATER, 1000000)
+            .set(Options.CONNECTION_LOW_WATER, 1000000)
+            .set(Options.WORKER_TASK_CORE_THREADS, workerThreads)
+            .set(Options.WORKER_TASK_MAX_THREADS, workerThreads)
+            .set(Options.TCP_NODELAY, true)
+            .set(Options.CORK, true)
+            .addAll(workerOption.map)
+            .map
+        val worker = xnio.createWorkerBuilder()
+            .run {
+                externalExecutorService = Executors.newVirtualThreadPerTaskExecutor()
+                populateFromOptions(opt)
+                build()
+            }
+        builder.setWorker(worker)
+
+    }
+
+}
