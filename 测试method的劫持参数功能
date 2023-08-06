@@ -1,0 +1,63 @@
+
+public class Main {
+    public static void main(String[] args) throws Throwable {
+        MethodHandle addExact$MH = MethodHandles.lookup().findStatic(Math.class, "addExact", MethodType.methodType(int.class, int.class, int.class));
+        MethodHandle plusNumber$MH = MethodHandles.lookup().findStatic(Main.class, "plusNumber", MethodType.methodType(int.class, int.class));
+        MethodHandle plus2Number$MH = MethodHandles.lookup().findStatic(Main.class, "plus2Number", MethodType.methodType(int.class, int.class));
+        //每个入参都+1
+        MethodHandle enhance$MH = MethodHandles.filterArguments(addExact$MH, 0, plusNumber$MH);
+        enhance$MH = MethodHandles.filterArguments(enhance$MH, 1, plus2Number$MH);
+
+        /**
+         *  等价于
+         *  public static int newfunction(int i) {
+         *      var param0 = Main.plusNumber(i);
+         *      var param1 = Main.plus2Number(i);
+         *      return Math(param0, param1)
+         * }
+         */
+        MethodHandle methodHandle = MethodHandles.permuteArguments(enhance$MH, MethodType.methodType(int.class, int.class), new int[2]);
+        // 1+1 + 1+2 = 5
+        System.out.println(methodHandle.invoke(1));
+        /**
+         *  等价于
+         *  public static int newfunction(int i0,int i1) {
+         *      var param0 = Main.plusNumber(i1);
+         *      var param1 = Main.plus2Number(i0);
+         *      return Math(param0, param1)
+         * }
+         */
+        MethodHandle methodHandleExchange = MethodHandles.permuteArguments(enhance$MH, MethodType.methodType(int.class, int.class, int.class), 1, 0);
+        
+        //2+1 + 1=2 = 6
+        System.out.println(methodHandleExchange.invoke(1, 2));
+
+        System.out.println(addExact$MH.invoke(1, 2));
+        System.out.println(enhance$MH.invoke(1, 2));
+        MethodHandle filterEnhance$MH = MethodHandles.filterReturnValue(enhance$MH, plusNumber$MH);
+        System.out.println(filterEnhance$MH.invoke(1, 2));
+
+        A a = new A();
+        a.a = 10;
+        VarHandle handle = MethodHandles.lookup()
+                .findVarHandle(A.class, "a", int.class);
+
+        VarHandle varHandle = MethodHandles.filterValue(handle, plusNumber$MH, plusNumber$MH);
+        varHandle.set(a, 100);
+        System.out.println(a.a);
+    }
+
+    static class A {
+        public int a;
+    }
+
+
+    public static int plusNumber(int i) {
+        return i + 1;
+    }
+
+    public static int plus2Number(int i) {
+        return i + 2;
+    }
+    
+}
